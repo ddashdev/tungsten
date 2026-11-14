@@ -33,7 +33,7 @@ use codegen_write::{seed_web_assets, write_codegen};
 use dispatch::{ResolvedCodegen, SyncContext};
 use individual::process_individual;
 use packed::process_packed;
-use paths::{collect_paths, glob_base, load_input_meta};
+use paths::{collect_paths, collect_web_assets, glob_base, load_input_meta};
 use raw::process_raw;
 
 // Target
@@ -176,9 +176,10 @@ pub async fn run(
     for (input_name, input) in &config.inputs {
         log!(section, "SYNCING \"{}\"", input_name);
         log!(debug, "Input \"{}\" path: {}", input_name, input.path);
+        let web = collect_web_assets(input).assets;
 
         let paths = match collect_paths(&input.path) {
-            Ok(p) if p.is_empty() && input.web.is_empty() => {
+            Ok(p) if p.is_empty() && web.is_empty() => {
                 log!(
                     warn,
                     "No supported files matched \"{}\" — skipping",
@@ -191,7 +192,7 @@ pub async fn run(
                     info,
                     "No local files matched \"{}\" — generating {} web asset(s)",
                     input.path,
-                    input.web.len()
+                    web.len()
                 );
                 let base_path = glob_base(&input.path);
                 let mut ctx = SyncContext::new(
@@ -212,7 +213,7 @@ pub async fn run(
                 );
                 let mut codegen_entries = Vec::new();
                 seed_web_assets(
-                    &input.web,
+                    &web,
                     &base_path,
                     codegen.strip_extension,
                     codegen.strip_whitespace,
@@ -273,7 +274,7 @@ pub async fn run(
                 other_paths,
                 compress_opts_ref,
                 audio_opts_ref,
-                &input.web,
+                &web,
             )
             .await;
         }
@@ -426,7 +427,7 @@ pub async fn run(
                     compress_opts_ref,
                     bleed,
                     uniform.as_ref(),
-                    &input.web,
+                    &web,
                 )
                 .await
             } else {
@@ -441,7 +442,7 @@ pub async fn run(
                     compress_opts_ref,
                     bleed,
                     input.svg_scale,
-                    &input.web,
+                    &web,
                 )
                 .await
             };

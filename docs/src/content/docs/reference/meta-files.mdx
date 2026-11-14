@@ -28,6 +28,7 @@ Any sidecar can also use a `.tmeta.toml` extension instead, such as `logo.png.tm
 | `description` | `string` | Overrides the description sent to Roblox. |
 | `type` | `string` | Overrides the asset type sent to Roblox. The value `"auto"` derives the type from the file kind. For `.rbxm` and `.rbxmx` files, `"animation"` or `"model"` pins the type without parsing the DOM. This takes precedence over the input-level `type`. |
 | `svg_scale` | `number` | Overrides the SVG rasterization scale for this asset or directory. The default is `1.0`; the minimum is `0.01`. |
+| `[web]` | `table` | Directory sidecars only. Maps paths relative to the directory to existing Roblox asset IDs, like [`[inputs.<name>.web]`](/tungsten/reference/configuration). |
 
 ## Examples
 
@@ -70,6 +71,35 @@ svg_scale = 2.0
 ```toml title="assets/icons/special.svg.tmeta"
 svg_scale = 4.0
 ```
+
+### Web Assets
+
+A directory sidecar can declare web assets so they don't have to live in `tungsten.toml`. Keys are relative to the directory the sidecar configures, and the directory doesn't need to exist:
+
+```toml title="assets/animations.tmeta.toml"
+type = "animation"
+
+[web]
+"mannequin/walk.rbxm" = { id = 1234567890 }
+"mannequin/death.rbxm" = { id = 1234567891 }
+```
+
+Nested directories can have their own sidecar, even when the directory itself only exists as its sidecar:
+
+```toml title="assets/animations/mannequin.tmeta.toml"
+[web]
+"idle.rbxm" = { id = 1234567892 }
+```
+
+- Tungsten reads the sidecar of the input's base directory and every sidecar below it.
+- Only entries that the input's `path` glob matches are kept, so `assets/**/*.png` ignores web animations declared in `assets/animations.tmeta`.
+- Keys must be relative paths inside the directory; empty, absolute or `..`-escaping keys are skipped with a warning.
+- `[web]` only works in directory sidecars. An asset sidecar such as `logo.png.tmeta` that declares one is ignored with a warning.
+- If the same asset is declared twice, `tungsten.toml` wins over sidecars, and a deeper sidecar wins over a shallower one.
+
+:::caution
+TOML puts every key after a `[web]` header inside that table, so write fields like `type` and `name` before `[web]`.
+:::
 
 :::tip
 Use custom names to keep assets and generated spritesheets easier to find in the Roblox Create dashboard.

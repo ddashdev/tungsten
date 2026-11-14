@@ -214,6 +214,16 @@ pub fn find_meta_file(target: &Path) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+/// The target a sidecar file name describes (`icons.tmeta.toml` -> `icons`),
+/// or `None` if `name` isn't a sidecar.
+pub fn meta_target(name: &str) -> Option<&str> {
+    META_SUFFIXES
+        .iter()
+        .rev()
+        .find_map(|suffix| name.strip_suffix(suffix))
+        .filter(|target| !target.is_empty() && !target.ends_with('/'))
+}
+
 /// Sidecar targets for `asset_path`, most specific first: a file is matched
 /// by its full name, then by its stem (`logo.png`, then `logo`); a directory
 /// by its own name.
@@ -241,6 +251,10 @@ pub struct AssetMeta {
     /// pin the kind and skip the DOM parse used to auto-detect animations.
     #[serde(rename = "type")]
     pub asset_type: Option<String>,
+    /// Web assets declared by a directory sidecar, keyed by paths relative to
+    /// that directory. Merged into the input's `[inputs.<name>.web]`.
+    #[serde(default)]
+    pub web: HashMap<relative_path::RelativePathBuf, WebAsset>,
 }
 
 impl AssetMeta {

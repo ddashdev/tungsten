@@ -6,6 +6,16 @@ use relative_path::RelativePathBuf;
 
 use super::dispatch::SyncContext;
 
+/// The codegen name for a web asset key: the key with the input's glob base
+/// stripped (`Assets/Anims/Walk.rbxm` under `Assets/Anims` -> `Walk.rbxm`).
+pub fn web_asset_name(key: &str, base_path: &str) -> String {
+    let name = key.replace('\\', "/");
+    let name = name
+        .strip_prefix(base_path.trim_end_matches('/'))
+        .unwrap_or(&name);
+    name.trim_start_matches('/').to_string()
+}
+
 /// Seeds web assets into codegen entries.
 pub fn seed_web_assets(
     web_assets: &std::collections::HashMap<RelativePathBuf, WebAsset>,
@@ -15,11 +25,7 @@ pub fn seed_web_assets(
     codegen_entries: &mut Vec<CodegenEntry>,
 ) {
     for (rel_path, web_asset) in web_assets {
-        let name = rel_path.to_string().replace('\\', "/");
-        let name = name
-            .strip_prefix(base_path.trim_end_matches('/'))
-            .unwrap_or(&name);
-        let name = name.trim_start_matches('/');
+        let name = web_asset_name(rel_path.as_str(), base_path);
         let key = if strip_extension {
             name.trim_end_matches('.').to_string()
         } else {

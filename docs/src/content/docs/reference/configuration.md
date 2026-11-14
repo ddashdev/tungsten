@@ -190,6 +190,8 @@ Maps local relative asset paths to existing Roblox asset IDs without re-uploadin
 | ----- | -------- | ----------------------------------------------------- |
 | `id`  | `number` | The existing Roblox asset ID to emit in the codegen.  |
 
+Web assets can also be declared in a directory sidecar's `[web]` table, with keys relative to that directory. See [Meta Files](/tungsten/reference/meta-files/). Entries in `tungsten.toml` win over sidecar entries for the same path.
+
 ---
 
 ## Asset Metadata Sidecars (`.tmeta`)

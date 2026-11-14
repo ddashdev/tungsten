@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use crate::api::upload::{RobloxClient, UploadParams};
 use crate::commands::sync::make_creator;
-use crate::commands::sync::paths::collect_paths;
+use crate::commands::sync::paths::{collect_paths, collect_web_assets};
 use crate::core::assets::asset::{AssetKind, ImageFormat};
 use crate::log;
 use crate::utils::config::Config;
@@ -67,20 +67,18 @@ pub async fn run(config: Config, api_key: Option<String>) -> Result<()> {
     for (name, input) in &config.inputs {
         log!(info, "Checking input \"{}\"...", name);
         log!(debug, "Input \"{}\" path: {}", name, input.path);
+        let web = collect_web_assets(input);
+        warnings += web.warnings;
+        let web = web.assets;
 
         let paths = collect_paths(&input.path)
             .map_err(|e| anyhow::anyhow!("Invalid glob for \"{}\": {}", name, e))?;
 
-        if paths.is_empty() && input.web.is_empty() {
+        if paths.is_empty() && web.is_empty() {
             log!(warn, "No supported files matched \"{}\"", input.path);
             warnings += 1;
         } else if paths.is_empty() {
-            log!(
-                success,
-                "Found {} web asset(s) for \"{}\"",
-                input.web.len(),
-                name
-            );
+            log!(success, "Found {} web asset(s) for \"{}\"", web.len(), name);
             passed += 1;
         } else {
             log!(success, "Found {} file(s) for \"{}\"", paths.len(), name);
