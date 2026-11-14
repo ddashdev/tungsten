@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0-web.1]
+
+Fork release (ddashdev/tungsten) built on top of the unreleased 4.0.0-rc.1 changes below it.
+
 ### Added
 
 - Metadata sidecars can use a `.tmeta.toml` extension (e.g. `logo.png.tmeta.toml`, `icons.tmeta.toml`) so editors treat them as TOML. `.tmeta` wins if both exist for the same target
