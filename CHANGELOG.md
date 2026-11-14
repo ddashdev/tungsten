@@ -19,6 +19,7 @@ Fork release (ddashdev/tungsten) built on top of the unreleased 4.0.0-rc.1 chang
 
 ### Fixed
 
+- Inputs with no matching files and no web assets were skipped, leaving their previous codegen module (and any entries removed since) in place; they now write an empty module
 - Directory sidecars for directories with a dot in their name (e.g. `v1.2/`) were looked up as `v1.tmeta`; they now use the full name (`v1.2.tmeta`)
 - `watch` now re-syncs when the input base directory's own sidecar (e.g. `assets/icons.tmeta`, which sits outside the watched directory) changes, and watches from the last complete path segment for globs like `assets/icon*/**/*`
 - Inputs with `[inputs.<name>.web]` entries but no matching local files now still generate their codegen module instead of being skipped, and `tungsten test` counts them as passing

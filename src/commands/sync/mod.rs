@@ -179,21 +179,23 @@ pub async fn run(
         let web = collect_web_assets(input).assets;
 
         let paths = match collect_paths(&input.path) {
-            Ok(p) if p.is_empty() && web.is_empty() => {
-                log!(
-                    warn,
-                    "No supported files matched \"{}\" — skipping",
-                    input.path
-                );
-                continue;
-            }
+            // An input with nothing to sync still rewrites its module, so
+            // entries removed since the last sync don't linger in it.
             Ok(p) if p.is_empty() => {
-                log!(
-                    info,
-                    "No local files matched \"{}\" — generating {} web asset(s)",
-                    input.path,
-                    web.len()
-                );
+                if web.is_empty() {
+                    log!(
+                        warn,
+                        "No supported files or web assets matched \"{}\" — writing an empty module",
+                        input.path
+                    );
+                } else {
+                    log!(
+                        info,
+                        "No local files matched \"{}\" — generating {} web asset(s)",
+                        input.path,
+                        web.len()
+                    );
+                }
                 let base_path = glob_base(&input.path);
                 let mut ctx = SyncContext::new(
                     input_name,

@@ -608,6 +608,30 @@ mod tests {
     // Luau: unchanged behaviour
 
     #[test]
+    fn test_empty_input_overwrites_stale_module() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("Animations.luau");
+        let path_str = path.to_str().unwrap();
+        generate(
+            asset_entries(),
+            "Animations",
+            "nested",
+            false,
+            path_str,
+            false,
+        )
+        .unwrap();
+        generate(Vec::new(), "Animations", "nested", false, path_str, false).unwrap();
+        let c = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !c.contains("rbxassetid"),
+            "stale entries must be gone:\n{c}"
+        );
+        assert!(c.contains("local Animations = {"), "{c}");
+        assert!(c.contains("return Animations"), "{c}");
+    }
+
+    #[test]
     fn test_luau_flat_assets() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("test_sounds.luau");
