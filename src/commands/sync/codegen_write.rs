@@ -61,3 +61,55 @@ pub fn write_codegen(ctx: &mut SyncContext<'_>, mut codegen_entries: Vec<Codegen
         ctx.errors += 1;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn web_only_input_seeds_keys_relative_to_base() {
+        let web: HashMap<RelativePathBuf, WebAsset> = [
+            ("Assets/Animations/Mannequin/Walk.rbxm", 91146021054199),
+            ("Assets/Animations/Mannequin/Death.rbxm", 83889629498050),
+            ("Assets/Animations/Idle.rbxm", 1),
+        ]
+        .into_iter()
+        .map(|(path, id)| (RelativePathBuf::from(path), WebAsset { id }))
+        .collect();
+
+        let mut entries = Vec::new();
+        seed_web_assets(&web, "Assets/Animations", false, false, &mut entries);
+
+        let tmp = tempfile::tempdir().unwrap();
+        let out = tmp.path().join("Animations.luau");
+        crate::core::postsync::codegen::generate(
+            entries,
+            "Animations",
+            "nested",
+            false,
+            out.to_str().unwrap(),
+            false,
+        )
+        .unwrap();
+
+        let luau = std::fs::read_to_string(&out).unwrap();
+        assert!(luau.contains("Mannequin = {"), "{luau}");
+        assert!(
+            luau.contains("[\"Walk.rbxm\"] = \"rbxassetid://91146021054199\""),
+            "{luau}"
+        );
+        assert!(
+            luau.contains("[\"Death.rbxm\"] = \"rbxassetid://83889629498050\""),
+            "{luau}"
+        );
+        assert!(
+            luau.contains("[\"Idle.rbxm\"] = \"rbxassetid://1\""),
+            "{luau}"
+        );
+        assert!(
+            !luau.contains("Assets"),
+            "keys must be relative to the glob base:\n{luau}"
+        );
+    }
+}

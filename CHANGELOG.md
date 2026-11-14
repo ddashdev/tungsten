@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Inputs with `[inputs.<name>.web]` entries but no matching local files now still generate their codegen module instead of being skipped, and `tungsten test` counts them as passing
+- `sync` no longer requires an API key for the `cloud` target when every input is web-only, since nothing is uploaded
+- Flat codegen output is now sorted by name, so unchanged inputs no longer rewrite their module on every sync
+
 ## [4.0.0-rc.1]
 
 ### Breaking

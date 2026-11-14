@@ -107,13 +107,16 @@ enum TreeNode<'a> {
 // Public API
 
 pub fn generate(
-    entries: Vec<CodegenEntry>,
+    mut entries: Vec<CodegenEntry>,
     table_name: &str,
     style: &str,
     strip_extension: bool,
     output_path: &str,
     ts_declaration: bool,
 ) -> Result<()> {
+    // Entries arrive in upload-completion and HashMap order; sorting keeps
+    // flat output stable so `write_if_changed` can skip unchanged modules.
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
     let luau = generate_luau(&entries, table_name, style, strip_extension);
 
     if let Some(parent) = std::path::Path::new(output_path).parent() {
@@ -614,6 +617,50 @@ mod tests {
         assert!(c.contains("\"rbxassetid://999\""));
         assert!(c.contains("\"rbxassetid://888\""));
         assert!(!c.contains("ImageRectOffset"));
+    }
+
+    #[test]
+    fn test_flat_output_is_sorted_by_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let first = tmp.path().join("first.luau");
+        let second = tmp.path().join("second.luau");
+        let entries = |names: [&str; 3]| -> Vec<CodegenEntry> {
+            names
+                .iter()
+                .map(|n| CodegenEntry::asset_id(n.to_string(), n.len() as u64))
+                .collect()
+        };
+        let first_path = first.to_str().unwrap();
+        let second_path = second.to_str().unwrap();
+        generate(
+            entries(["c.rbxm", "a.rbxm", "b.rbxm"]),
+            "A",
+            "flat",
+            false,
+            first_path,
+            true,
+        )
+        .unwrap();
+        generate(
+            entries(["b.rbxm", "a.rbxm", "c.rbxm"]),
+            "A",
+            "flat",
+            false,
+            second_path,
+            true,
+        )
+        .unwrap();
+
+        let luau = std::fs::read_to_string(&first).unwrap();
+        assert_eq!(luau, std::fs::read_to_string(&second).unwrap());
+        let a = luau.find("a.rbxm").unwrap();
+        let b = luau.find("b.rbxm").unwrap();
+        let c = luau.find("c.rbxm").unwrap();
+        assert!(a < b && b < c, "flat entries must be sorted:\n{luau}");
+        assert_eq!(
+            std::fs::read_to_string(tmp.path().join("first.d.ts")).unwrap(),
+            std::fs::read_to_string(tmp.path().join("second.d.ts")).unwrap()
+        );
     }
 
     #[test]

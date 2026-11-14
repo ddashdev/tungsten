@@ -71,9 +71,17 @@ pub async fn run(config: Config, api_key: Option<String>) -> Result<()> {
         let paths = collect_paths(&input.path)
             .map_err(|e| anyhow::anyhow!("Invalid glob for \"{}\": {}", name, e))?;
 
-        if paths.is_empty() {
+        if paths.is_empty() && input.web.is_empty() {
             log!(warn, "No supported files matched \"{}\"", input.path);
             warnings += 1;
+        } else if paths.is_empty() {
+            log!(
+                success,
+                "Found {} web asset(s) for \"{}\"",
+                input.web.len(),
+                name
+            );
+            passed += 1;
         } else {
             log!(success, "Found {} file(s) for \"{}\"", paths.len(), name);
             passed += 1;

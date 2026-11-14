@@ -29,6 +29,7 @@ use crate::utils::config::Config;
 use crate::utils::env::resolve_api_key;
 use crate::utils::logger::{clear_progress_line, progress};
 
+use codegen_write::{seed_web_assets, write_codegen};
 use dispatch::{ResolvedCodegen, SyncContext};
 use individual::process_individual;
 use packed::process_packed;
@@ -85,7 +86,16 @@ pub async fn run(
         log!(info, "Dry run — no uploads or file copies will occur");
     }
 
-    let client: Option<Arc<RobloxClient>> = if target == Target::Cloud && !dry_run {
+    // Web-only inputs upload nothing, so they don't need an API key.
+    let needs_client = target == Target::Cloud
+        && !dry_run
+        && config.inputs.values().any(|input| {
+            collect_paths(&input.path)
+                .map(|p| !p.is_empty())
+                .unwrap_or(true)
+        });
+
+    let client: Option<Arc<RobloxClient>> = if needs_client {
         let key = api_key.as_deref().ok_or_else(|| {
             anyhow::anyhow!(
                 "No API key provided\n  \
@@ -168,12 +178,48 @@ pub async fn run(
         log!(debug, "Input \"{}\" path: {}", input_name, input.path);
 
         let paths = match collect_paths(&input.path) {
-            Ok(p) if p.is_empty() => {
+            Ok(p) if p.is_empty() && input.web.is_empty() => {
                 log!(
                     warn,
                     "No supported files matched \"{}\" — skipping",
                     input.path
                 );
+                continue;
+            }
+            Ok(p) if p.is_empty() => {
+                log!(
+                    info,
+                    "No local files matched \"{}\" — generating {} web asset(s)",
+                    input.path,
+                    input.web.len()
+                );
+                let base_path = glob_base(&input.path);
+                let mut ctx = SyncContext::new(
+                    input_name,
+                    &base_path,
+                    &input.output_path,
+                    target,
+                    dry_run,
+                    &creator,
+                    &client,
+                    &studio_sync,
+                    &debug_sync,
+                    &mut lockfile,
+                    &mut studio_expected_files,
+                    max_concurrent_uploads,
+                    codegen.clone(),
+                    None,
+                );
+                let mut codegen_entries = Vec::new();
+                seed_web_assets(
+                    &input.web,
+                    &base_path,
+                    codegen.strip_extension,
+                    codegen.strip_whitespace,
+                    &mut codegen_entries,
+                );
+                write_codegen(&mut ctx, codegen_entries);
+                total_errors += ctx.errors;
                 continue;
             }
             Ok(p) => p,
