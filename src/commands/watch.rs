@@ -3,12 +3,14 @@
 use anyhow::{Context, Result};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::Instant;
 
 use crate::commands::sync::Target;
+use crate::commands::sync::paths::walk_root;
 use crate::log;
 use crate::utils::config::{self, Config};
 
@@ -25,12 +27,14 @@ pub async fn run(
     log!(section, "WATCH MODE");
     log!(info, "Watching for changes (target: {:?})...", target);
 
-    let watch_dirs: Vec<String> = config
+    let mut watch_dirs: Vec<String> = config
         .inputs
         .values()
-        .map(|input| crate::commands::sync::paths::glob_base(&input.path))
-        .filter(|base| !base.is_empty())
+        .map(|input| walk_root(&input.path).to_string())
+        .filter(|root| !root.is_empty())
         .collect();
+    watch_dirs.sort();
+    watch_dirs.dedup();
 
     if watch_dirs.is_empty() {
         anyhow::bail!(
@@ -59,6 +63,22 @@ pub async fn run(
             log!(info, "Watching \"{}\"", dir);
         } else {
             log!(warn, "Watch directory \"{}\" does not exist. Skipping", dir);
+        }
+    }
+
+    // A directory's own sidecar sits next to it, outside the recursive watch,
+    // so each root's parent is watched too, filtered to that sidecar.
+    let scope = WatchScope::new(&watch_dirs);
+    for parent in &scope.sidecar_parents {
+        if parent.exists() && !watch_dirs.iter().any(|dir| Path::new(dir) == parent) {
+            watcher
+                .watch(parent, RecursiveMode::NonRecursive)
+                .with_context(|| format!("Failed to watch directory \"{}\"", parent.display()))?;
+            log!(
+                debug,
+                "Watching \"{}\" for sidecar changes",
+                parent.display()
+            );
         }
     }
 
@@ -98,7 +118,7 @@ pub async fn run(
             event = rx.recv() => {
                 match event {
                     Some(Ok(event)) => {
-                        if is_relevant_event(&event, &output_files) {
+                        if is_relevant_event(&event, &output_files, &scope) {
                             log!(debug, "Change detected: {:?}", event.kind);
                             last_event = Some(Instant::now());
                             pending_change = true;
@@ -150,7 +170,60 @@ async fn do_sync(
     is_syncing.store(false, Ordering::Relaxed);
 }
 
-fn is_relevant_event(event: &Event, output_files: &HashSet<String>) -> bool {
+/// What the watcher covers: the recursive input roots, plus the parent
+/// directories watched only for each root's own sidecar.
+struct WatchScope {
+    roots: Vec<PathBuf>,
+    sidecar_parents: Vec<PathBuf>,
+    sidecar_names: HashSet<String>,
+}
+
+impl WatchScope {
+    fn new(watch_dirs: &[String]) -> Self {
+        let mut sidecar_parents = Vec::new();
+        let mut sidecar_names = HashSet::new();
+        for dir in watch_dirs {
+            let dir = Path::new(dir);
+            let Some(name) = dir.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            sidecar_names.insert(format!("{name}.tmeta"));
+            sidecar_names.insert(format!("{name}.tmeta.toml"));
+            let parent = match dir.parent() {
+                Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+                _ => PathBuf::from("."),
+            };
+            if !sidecar_parents.contains(&parent) {
+                sidecar_parents.push(parent);
+            }
+        }
+        Self {
+            roots: watch_dirs
+                .iter()
+                .filter_map(|dir| Path::new(dir).canonicalize().ok())
+                .collect(),
+            sidecar_parents,
+            sidecar_names,
+        }
+    }
+
+    /// Events from a sidecar-only parent watch count only for the sidecar itself.
+    fn covers(&self, path: &Path) -> bool {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if self.sidecar_names.contains(name) {
+            return true;
+        }
+        let probe = path
+            .canonicalize()
+            .or_else(|_| path.parent().unwrap_or(path).canonicalize());
+        match probe {
+            Ok(probe) => self.roots.iter().any(|root| probe.starts_with(root)),
+            Err(_) => true,
+        }
+    }
+}
+
+fn is_relevant_event(event: &Event, output_files: &HashSet<String>, scope: &WatchScope) -> bool {
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_) => {
             // Ignore our own output files so watch mode doesn't re-sync forever.
@@ -170,6 +243,9 @@ fn is_relevant_event(event: &Event, output_files: &HashSet<String>) -> bool {
                 }
                 // Ignore the debug output folder entirely.
                 if path.starts_with(".tungsten_debug") {
+                    return false;
+                }
+                if !scope.covers(path) {
                     return false;
                 }
             }
