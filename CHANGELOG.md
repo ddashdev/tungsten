@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Metadata sidecars can use a `.tmeta.toml` extension (e.g. `logo.png.tmeta.toml`, `icons.tmeta.toml`) so editors treat them as TOML. `.tmeta` wins if both exist for the same target
+
 ### Fixed
+
+- Directory sidecars for directories with a dot in their name (e.g. `v1.2/`) were looked up as `v1.tmeta`; they now use the full name (`v1.2.tmeta`)
 
 - Inputs with `[inputs.<name>.web]` entries but no matching local files now still generate their codegen module instead of being skipped, and `tungsten test` counts them as passing
 - `sync` no longer requires an API key for the `cloud` target when every input is web-only, since nothing is uploaded

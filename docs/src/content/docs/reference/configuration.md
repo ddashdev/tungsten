@@ -203,6 +203,8 @@ In addition to `tungsten.toml`, individual assets or directories can be configur
 3. Nearest directory sidecar: `<dir>.tmeta` (applies to nested files)
 4. Configured `tungsten.toml` defaults
 
+Every sidecar can also be named with a `.tmeta.toml` extension (e.g. `icon.png.tmeta.toml`, `icons.tmeta.toml`) so editors treat it as TOML. If both forms exist for the same target, `.tmeta` wins.
+
 ### Supported Sidecar Fields
 
 | Field         | Type     | Description                                                                                           |

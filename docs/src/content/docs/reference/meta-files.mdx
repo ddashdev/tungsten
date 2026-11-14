@@ -18,6 +18,8 @@ Tungsten checks for metadata files in this order:
 
 For example, `assets/logo.png.tmeta` is the asset-specific sidecar for `assets/logo.png`.
 
+Any sidecar can also use a `.tmeta.toml` extension instead, such as `logo.png.tmeta.toml` or `icons.tmeta.toml`, so editors highlight it as TOML. If both forms exist for the same asset or directory, the `.tmeta` file wins.
+
 ## Supported Fields
 
 | Field | Type | Description |

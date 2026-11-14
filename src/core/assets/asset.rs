@@ -196,9 +196,38 @@ pub fn is_animation_file(path: &Path) -> Result<bool> {
 
 // Meta files
 
-/// Optional per-asset metadata loaded from a `.tmeta` sidecar file.
-/// The file must share the same stem as the asset:
-/// `sword.png` -> `sword.tmeta`
+/// Sidecar suffixes in lookup order. `.tmeta.toml` is the same format under
+/// an extension editors recognise as TOML; when both exist, `.tmeta` wins.
+const META_SUFFIXES: [&str; 2] = [".tmeta", ".tmeta.toml"];
+
+/// The sidecar for `target` (`<target>.tmeta`, then `<target>.tmeta.toml`),
+/// if one exists. `target` is a file (`logo.png`), a stem (`logo`) or a
+/// directory (`icons`).
+pub fn find_meta_file(target: &Path) -> Option<PathBuf> {
+    META_SUFFIXES
+        .iter()
+        .map(|suffix| {
+            let mut path = target.as_os_str().to_owned();
+            path.push(suffix);
+            PathBuf::from(path)
+        })
+        .find(|path| path.is_file())
+}
+
+/// Sidecar targets for `asset_path`, most specific first: a file is matched
+/// by its full name, then by its stem (`logo.png`, then `logo`); a directory
+/// by its own name.
+fn meta_targets(asset_path: &Path) -> Vec<PathBuf> {
+    if asset_path.is_file() {
+        vec![asset_path.to_path_buf(), asset_path.with_extension("")]
+    } else {
+        vec![asset_path.to_path_buf()]
+    }
+}
+
+/// Optional per-asset metadata loaded from a `.tmeta` (or `.tmeta.toml`)
+/// sidecar file. The file must share the same name or stem as the asset:
+/// `sword.png` -> `sword.png.tmeta` or `sword.tmeta`
 #[derive(Deserialize, Debug, Default, Clone)]
 pub struct AssetMeta {
     /// Overrides the display name sent to Roblox.
@@ -215,54 +244,29 @@ pub struct AssetMeta {
 }
 
 impl AssetMeta {
-    /// Try to load a `.tmeta` sidecar next to `asset_path`.
+    /// Try to load the sidecar next to `asset_path`.
     /// For files, first tries `name.format.tmeta` (e.g., `image.png.tmeta`),
     /// then falls back to `name.tmeta` (e.g., `image.tmeta`).
     /// For directories, uses `name.tmeta` (e.g., `icons.tmeta`).
+    /// Each step also accepts the `.tmeta.toml` form (e.g., `image.png.tmeta.toml`).
     /// Returns `Default::default()` (all `None`) if no sidecar exists.
     pub fn load_for(asset_path: &Path) -> Result<Self> {
-        // Try the more specific format first for files: name.format.tmeta
-        let mut tmeta_path = asset_path.to_path_buf();
-
-        if asset_path.is_file() {
-            // For files: try name.format.tmeta first (e.g., image.png.tmeta)
-            let extension = asset_path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            tmeta_path.set_extension(format!("{}.tmeta", extension));
-
-            if tmeta_path.exists() {
-                let contents = std::fs::read_to_string(&tmeta_path)
-                    .with_context(|| format!("Failed to read \"{}\"", tmeta_path.display()))?;
-
-                return toml::from_str(&contents)
-                    .with_context(|| format!("Failed to parse \"{}\"", tmeta_path.display()));
-            }
-
-            // Fall back to name.tmeta (e.g., image.tmeta)
-            tmeta_path = asset_path.with_extension("tmeta");
-            tmeta_path.set_file_name(format!(
-                "{}.tmeta",
-                asset_path
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-            ));
-        } else {
-            // For directories: use name.tmeta (e.g., icons.tmeta)
-            tmeta_path = asset_path.with_extension("tmeta");
+        match meta_targets(asset_path)
+            .iter()
+            .find_map(|target| find_meta_file(target))
+        {
+            Some(meta_path) => Self::load_file(&meta_path),
+            None => Ok(Self::default()),
         }
+    }
 
-        if !tmeta_path.exists() {
-            return Ok(Self::default());
-        }
-
-        let contents = std::fs::read_to_string(&tmeta_path)
-            .with_context(|| format!("Failed to read \"{}\"", tmeta_path.display()))?;
+    /// Parse a specific sidecar file.
+    pub fn load_file(meta_path: &Path) -> Result<Self> {
+        let contents = std::fs::read_to_string(meta_path)
+            .with_context(|| format!("Failed to read \"{}\"", meta_path.display()))?;
 
         toml::from_str(&contents)
-            .with_context(|| format!("Failed to parse \"{}\"", tmeta_path.display()))
+            .with_context(|| format!("Failed to parse \"{}\"", meta_path.display()))
     }
 
     /// Final display name
@@ -359,29 +363,10 @@ fn svg_scale_from_tmeta(item: &Path, cache: &SvgScaleCache) -> Option<f32> {
         v
     }
 
-    if item.is_file() {
-        if let Some(ext) = item.extension() {
-            let mut path = item.to_path_buf();
-            path.set_extension(format!("{}.tmeta", ext.to_string_lossy()));
-            if let Some(scale) = read_cached(&path, cache) {
-                return Some(scale);
-            }
-        }
-        let mut path = item.to_path_buf();
-        path.set_extension("tmeta");
-        if let Some(scale) = read_cached(&path, cache) {
-            return Some(scale);
-        }
-    } else {
-        let dir_name = item.file_name()?.to_os_string();
-        let mut parent = item.parent()?.to_path_buf();
-        parent.push(dir_name);
-        parent.set_extension("tmeta");
-        if let Some(scale) = read_cached(&parent, cache) {
-            return Some(scale);
-        }
-    }
-    None
+    meta_targets(item)
+        .iter()
+        .filter_map(|target| find_meta_file(target))
+        .find_map(|meta_path| read_cached(&meta_path, cache))
 }
 
 /// Read `svg_scale` from a single `.tmeta` file, or `None` if absent/unreadable.
@@ -594,5 +579,58 @@ mod tests {
         let default_meta = AssetMeta::load_for(&file_path).unwrap();
         assert_eq!(default_meta.name, None);
         assert_eq!(default_meta.description, None);
+    }
+
+    #[test]
+    fn test_meta_file_toml_extension() {
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+        let file_path = dir.join("logo.png");
+        std::fs::write(&file_path, b"").unwrap();
+        let folder = dir.join("v1.2");
+        std::fs::create_dir(&folder).unwrap();
+
+        std::fs::write(dir.join("logo.png.tmeta.toml"), "name = \"Specific\"").unwrap();
+        std::fs::write(dir.join("logo.tmeta"), "name = \"Stem\"").unwrap();
+        assert_eq!(
+            AssetMeta::load_for(&file_path).unwrap().name.as_deref(),
+            Some("Specific"),
+            "a full-name .tmeta.toml beats a stem .tmeta"
+        );
+
+        std::fs::write(dir.join("logo.png.tmeta"), "name = \"Plain\"").unwrap();
+        assert_eq!(
+            AssetMeta::load_for(&file_path).unwrap().name.as_deref(),
+            Some("Plain"),
+            ".tmeta wins over .tmeta.toml for the same target"
+        );
+
+        std::fs::remove_file(dir.join("logo.png.tmeta")).unwrap();
+        std::fs::remove_file(dir.join("logo.png.tmeta.toml")).unwrap();
+        std::fs::remove_file(dir.join("logo.tmeta")).unwrap();
+        std::fs::write(dir.join("logo.tmeta.toml"), "name = \"StemToml\"").unwrap();
+        assert_eq!(
+            AssetMeta::load_for(&file_path).unwrap().name.as_deref(),
+            Some("StemToml")
+        );
+
+        std::fs::write(
+            dir.join("v1.2.tmeta.toml"),
+            "name = \"Folder\"\nsvg_scale = 3.0",
+        )
+        .unwrap();
+        assert_eq!(
+            AssetMeta::load_for(&folder).unwrap().name.as_deref(),
+            Some("Folder"),
+            "directory names containing dots keep their full name"
+        );
+
+        let svg = folder.join("icon.svg");
+        std::fs::write(&svg, b"").unwrap();
+        let scale =
+            effective_svg_scale_for_path(&svg, dir.to_str().unwrap(), None, &new_svg_scale_cache());
+        assert_eq!(scale, 3.0);
     }
 }

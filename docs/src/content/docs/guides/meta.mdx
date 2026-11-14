@@ -30,6 +30,10 @@ description = "The high-resolution logo used for the main menu."
 
 Tungsten first looks for a file named after the full asset, like `logo.png.tmeta`. If that isn't found, it looks for `logo.tmeta` instead.
 
+:::tip
+Any metadata file can end in `.tmeta.toml` instead of `.tmeta`, like `logo.png.tmeta.toml`, so your editor highlights it as TOML. If both exist, the `.tmeta` file is used.
+:::
+
 ### Directory Metadata
 
 You can also place a `.tmeta` file next to a directory to apply metadata to the directory's contents. This is useful when packing images into a spritesheet: the directory's `name` becomes the generated spritesheet's prefix.

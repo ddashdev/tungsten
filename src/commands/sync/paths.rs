@@ -50,6 +50,8 @@ pub fn relative_path(path: &Path, base: &str) -> String {
 }
 
 pub fn load_input_meta(base_path: &str) -> AssetMeta {
-    let tmeta_path = Path::new(base_path).with_extension("tmeta");
-    AssetMeta::load_for(&tmeta_path).unwrap_or_default()
+    if base_path.is_empty() {
+        return AssetMeta::default();
+    }
+    AssetMeta::load_for(Path::new(base_path)).unwrap_or_default()
 }
