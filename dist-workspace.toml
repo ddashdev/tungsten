@@ -16,6 +16,6 @@ checksum = "false"
 # Generate and dist a source tarball
 source-tarball = false
 
-# Run the platform-agnostic CI jobs on Blacksmith runners
+# Run the platform-agnostic CI jobs on GitHub-hosted runners (fork)
 [dist.github-custom-runners]
-global = "blacksmith-4vcpu-ubuntu-2204"
+global = "ubuntu-22.04"

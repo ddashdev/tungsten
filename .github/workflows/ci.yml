@@ -26,9 +26,9 @@ jobs:
       matrix:
         os:
           [
-            blacksmith-2vcpu-ubuntu-2404,
-            blacksmith-4vcpu-windows-2025,
-            blacksmith-6vcpu-macos-latest,
+            ubuntu-24.04,
+            windows-2025,
+            macos-latest,
           ]
 
     steps:
@@ -47,7 +47,7 @@ jobs:
 
   lint:
     name: Format & Clippy
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: "-Dwarnings"
 

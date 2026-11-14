@@ -11,6 +11,7 @@ on:
 jobs:
   publish:
     name: Cargo Publish
+    if: github.repository == 'pwnwrkz/tungsten'
     runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
