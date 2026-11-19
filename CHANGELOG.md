@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `strip_extension = false` only kept the extension on web asset keys; local files always lost theirs, so one module could mix `["Walk.rbxm"]` and `Idle`. Local assets now keep their source extension too (`["Idle.rbxm"]`, `["icon.png"]`). Lockfile keys are unchanged, so nothing is re-uploaded
+
 ## [4.0.0-web.2]
 
 ### Fixed

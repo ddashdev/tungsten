@@ -29,7 +29,7 @@ use crate::utils::config::Config;
 use crate::utils::env::resolve_api_key;
 use crate::utils::logger::{clear_progress_line, progress};
 
-use codegen_write::{seed_web_assets, write_codegen};
+use codegen_write::{seed_web_assets, source_extensions, write_codegen};
 use dispatch::{ResolvedCodegen, SyncContext};
 use individual::process_individual;
 use packed::process_packed;
@@ -237,6 +237,7 @@ pub async fn run(
         crate::utils::trace::mark(&format!("paths collected for input \"{}\"", input_name));
 
         let base_path = glob_base(&input.path);
+        let source_exts = source_extensions(&paths, &base_path);
         let compress_options = input.resolved_compress_options();
         let compress_opts_ref = compress_options.as_ref();
         let audio_options = input.resolved_audio_options();
@@ -271,6 +272,7 @@ pub async fn run(
                 codegen.clone(),
                 asset_type_override,
             );
+            ctx.source_exts = source_exts.clone();
             total_errors += process_raw(
                 &mut ctx,
                 other_paths,
@@ -311,6 +313,7 @@ pub async fn run(
                 codegen.clone(),
                 asset_type_override,
             );
+            ctx.source_exts = source_exts;
 
             let errs = if input.packable.unwrap_or(false) {
                 // Packed: every image must be decoded up front for bin-packing

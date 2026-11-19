@@ -1,7 +1,7 @@
 //! Shared sync context and the cloud/studio/debug dispatch + upload-collection machinery
 //! used by every `process_*` routine.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -57,6 +57,9 @@ pub struct SyncContext<'a> {
     pub studio_expected_files: &'a mut HashSet<String>,
     pub semaphore: Arc<Semaphore>,
     pub codegen: ResolvedCodegen,
+    /// Source file extensions keyed by asset name (`icons/arrow` -> `png`),
+    /// restored on codegen keys when `strip_extension` is off.
+    pub source_exts: HashMap<String, String>,
     /// Explicit asset-type override for this input (None = derive from kind).
     pub asset_type_override: Option<String>,
     /// Per-asset failures accumulated during this input's pass.
@@ -95,6 +98,7 @@ impl<'a> SyncContext<'a> {
             studio_expected_files,
             semaphore: Arc::new(Semaphore::new(max_concurrent_uploads.max(1))),
             codegen,
+            source_exts: HashMap::new(),
             asset_type_override,
             errors: 0,
         }
@@ -453,6 +457,7 @@ pub fn test_context<'a>(
             ts_declaration: false,
             strip_whitespace: false,
         },
+        source_exts: HashMap::new(),
         asset_type_override: None,
         errors: 0,
     }
