@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Animations (`.rbxm`/`.rbxmx` files detected or pinned as animations) were uploaded with the `Model` asset type, so Roblox refused to load them as animations. They now upload as `Animation`. Animations uploaded by an earlier version have to be removed from `tungsten.lock` to be uploaded again
 - `type` in a directory sidecar was ignored for the files below it, despite the docs. It now reaches every file in the directory and its nested directories, the nearest sidecar winning
+- On the `cloud` target, a file whose contents changed kept its cached asset id instead of being uploaded again
 - `sync -v` now logs the asset type each upload is sent as
 
 ## [4.0.0-web.3]

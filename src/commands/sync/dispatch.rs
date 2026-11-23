@@ -266,12 +266,20 @@ pub async fn collect_upload_results(
 /// upload completes and `collect_upload_results` runs).
 ///
 /// The lockfile entry (kind/source_hash/hash/packable) is upserted first so
-/// every target branch — including cache hits — sees a current entry.
+/// every target branch — including cache hits — sees a current entry. The
+/// cloud cache check has to read the previous `source_hash` before that.
 pub fn dispatch_asset(
     asset: PendingAsset,
     phase: &mut DispatchPhase<'_, '_>,
     codegen_entries: &mut Vec<CodegenEntry>,
 ) {
+    let cached_id = phase
+        .ctx
+        .lockfile
+        .entry(phase.ctx.input_name, &asset.name)
+        .filter(|e| e.source_hash == asset.source_hash)
+        .and_then(|e| e.id);
+
     if !phase.ctx.dry_run {
         let input = phase.ctx.input_name;
         phase.ctx.lockfile.upsert_plain(
@@ -381,18 +389,7 @@ pub fn dispatch_asset(
             codegen_entries.push(CodegenEntry::asset_id(asset.name, fallback));
         }
         Target::Cloud => {
-            let cache_hit = phase
-                .ctx
-                .lockfile
-                .entry(phase.ctx.input_name, &asset.name)
-                .is_some_and(|e| e.source_hash == asset.source_hash && e.id.is_some());
-            if cache_hit {
-                let cached_id = phase
-                    .ctx
-                    .lockfile
-                    .entry(phase.ctx.input_name, &asset.name)
-                    .and_then(|e| e.id)
-                    .unwrap_or(0);
+            if let Some(cached_id) = cached_id {
                 clear_progress_line();
                 log!(
                     debug,
@@ -460,5 +457,59 @@ pub fn test_context<'a>(
         source_exts: HashMap::new(),
         asset_type_override: None,
         errors: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::postsync::codegen::AssetRef;
+
+    fn pending(source_hash: &str) -> PendingAsset {
+        PendingAsset {
+            name: "Idle".to_string(),
+            path: PathBuf::from("Idle.rbxm"),
+            bytes: Bytes::new(),
+            source_hash: source_hash.to_string(),
+            hash: source_hash.to_string(),
+            kind: AssetKind::Animation,
+            display_name: "Idle".to_string(),
+            description: String::new(),
+            asset_type_override: None,
+            upload_name: None,
+            studio_rel: String::new(),
+            debug_rel: "Idle.rbxm".to_string(),
+            studio_needs_upload: true,
+        }
+    }
+
+    /// Dispatches to the cloud target with no client, where an asset that
+    /// isn't served from the lockfile comes back with id 0.
+    fn cloud_dispatch(lockfile: &mut Lockfile, source_hash: &str) -> AssetRef {
+        let mut expected = HashSet::new();
+        let mut ctx = test_context("anims", Target::Cloud, false, lockfile, &mut expected);
+        let mut entries = Vec::new();
+        let mut phase = DispatchPhase::new(&mut ctx, 1);
+        dispatch_asset(pending(source_hash), &mut phase, &mut entries);
+        entries.remove(0).asset_ref
+    }
+
+    fn uploaded_lockfile() -> Lockfile {
+        let mut lockfile = Lockfile::default();
+        lockfile.upsert_plain("anims", "Idle", "model/x-rbxm", "old", "old", false);
+        lockfile.set_id("anims", "Idle", 42);
+        lockfile
+    }
+
+    #[test]
+    fn unchanged_source_reuses_the_cached_id() {
+        let mut lockfile = uploaded_lockfile();
+        assert_eq!(cloud_dispatch(&mut lockfile, "old"), AssetRef::Id(42));
+    }
+
+    #[test]
+    fn changed_source_is_not_served_from_the_lockfile() {
+        let mut lockfile = uploaded_lockfile();
+        assert_eq!(cloud_dispatch(&mut lockfile, "new"), AssetRef::Id(0));
     }
 }
