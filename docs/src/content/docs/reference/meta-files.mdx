@@ -72,6 +72,20 @@ svg_scale = 2.0
 svg_scale = 4.0
 ```
 
+### Asset Type
+
+Set `type` on a directory to apply it to every file in that directory and its nested directories. The nearest sidecar that sets `type` wins, so a nested directory or a single asset can override it, and `type = "auto"` goes back to detecting the type from the file:
+
+```toml title="assets/animations.tmeta"
+type = "animation"
+```
+
+```toml title="assets/animations/props.tmeta"
+type = "model"
+```
+
+`.rbxm` and `.rbxmx` files pinned or detected as animations are uploaded with the `Animation` asset type; other models use `Model`.
+
 ### Web Assets
 
 A directory sidecar can declare web assets so they don't have to live in `tungsten.toml`. Keys are relative to the directory the sidecar configures, and the directory doesn't need to exist:

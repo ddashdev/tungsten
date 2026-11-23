@@ -97,7 +97,7 @@ fn process_single_image_sync(
     let bytes = maybe_compress_png(bytes, ctx.compress_options);
     let hash = hash_bytes(&bytes);
     let kind = AssetKind::Image(ImageFormat::Png);
-    let meta = AssetMeta::load_for(&path).unwrap_or_default();
+    let meta = AssetMeta::load_for_asset(&path, ctx.base_path).unwrap_or_default();
     let display_name = meta.resolve_name(&img.name).to_string();
     let description = meta.resolve_description("Uploaded by Tungsten").to_string();
     let asset_type_override = meta.resolve_asset_type().map(|s| s.to_string());

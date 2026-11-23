@@ -68,7 +68,8 @@ impl AssetKind {
         match self {
             AssetKind::Image(_) | AssetKind::Svg => "Decal",
             AssetKind::Audio(_) => "Audio",
-            AssetKind::Model(_) | AssetKind::Animation => "Model",
+            AssetKind::Model(_) => "Model",
+            AssetKind::Animation => "Animation",
         }
     }
 
@@ -274,6 +275,18 @@ impl AssetMeta {
         }
     }
 
+    /// [`Self::load_for`], with `type` inherited from the nearest directory
+    /// sidecar between the asset and the input's `base_path` (inclusive) when
+    /// the asset's own sidecar doesn't set one. A nearer `type = "auto"`
+    /// stops the search, so it resets an outer directory's type.
+    pub fn load_for_asset(asset_path: &Path, base_path: &str) -> Result<Self> {
+        let mut meta = Self::load_for(asset_path)?;
+        if meta.asset_type.is_none() {
+            meta.asset_type = inherited_asset_type(asset_path, base_path);
+        }
+        Ok(meta)
+    }
+
     /// Parse a specific sidecar file.
     pub fn load_file(meta_path: &Path) -> Result<Self> {
         let contents = std::fs::read_to_string(meta_path)
@@ -325,6 +338,29 @@ impl AssetMeta {
             _ => None,
         }
     }
+}
+
+/// The `type` of the nearest directory sidecar above `asset_path`, walking up
+/// to and including the input's `base_path` (whose sidecar sits beside it).
+/// Unreadable sidecars are skipped; web asset collection already warns about
+/// them.
+fn inherited_asset_type(asset_path: &Path, base_path: &str) -> Option<String> {
+    let base = Path::new(base_path);
+    for dir in asset_path.ancestors().skip(1) {
+        if dir.as_os_str().is_empty() || !dir.starts_with(base) {
+            break;
+        }
+        let asset_type = find_meta_file(dir)
+            .and_then(|meta_path| AssetMeta::load_file(&meta_path).ok())
+            .and_then(|meta| meta.asset_type);
+        if asset_type.is_some() {
+            return asset_type;
+        }
+        if dir == base {
+            break;
+        }
+    }
+    None
 }
 
 // SVG scale resolution from `.tmeta` sidecars
@@ -467,6 +503,68 @@ mod tests {
     #[test]
     fn test_svg_is_packable() {
         assert!(AssetKind::Svg.is_packable());
+    }
+
+    #[test]
+    fn animations_upload_as_their_own_api_type() {
+        assert_eq!(AssetKind::Animation.api_type(), "Animation");
+        assert_eq!(AssetKind::Animation.mime(), "model/x-rbxm");
+        assert_eq!(AssetKind::Model(ModelFormat::Roblox).api_type(), "Model");
+    }
+
+    #[test]
+    fn directory_sidecar_type_reaches_nested_assets() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("Animations");
+        let left = base.join("Bows").join("Shortbow").join("Left");
+        let props = base.join("Props");
+        std::fs::create_dir_all(&left).unwrap();
+        std::fs::create_dir_all(&props).unwrap();
+        for file in [
+            left.join("Idle.rbxm"),
+            left.join("Shoot.rbxm"),
+            props.join("Crate.rbxm"),
+        ] {
+            std::fs::write(file, b"not a real rbxm").unwrap();
+        }
+        std::fs::write(
+            tmp.path().join("Animations.tmeta.toml"),
+            "type = \"animation\"\n",
+        )
+        .unwrap();
+        let base_text = base.to_string_lossy().into_owned();
+        let load = |path: PathBuf| AssetMeta::load_for_asset(&path, &base_text).unwrap();
+
+        let idle = load(left.join("Idle.rbxm"));
+        assert_eq!(idle.pinned_model_kind(), Some(AssetKind::Animation));
+        assert_eq!(idle.name, None, "only `type` is inherited");
+
+        std::fs::write(base.join("Props.tmeta"), "type = \"model\"\n").unwrap();
+        assert_eq!(
+            load(props.join("Crate.rbxm")).pinned_model_kind(),
+            Some(AssetKind::Model(ModelFormat::Roblox)),
+            "the nearest directory sidecar wins"
+        );
+
+        std::fs::write(left.join("Shoot.rbxm.tmeta"), "type = \"auto\"\n").unwrap();
+        assert_eq!(
+            load(left.join("Shoot.rbxm")).pinned_model_kind(),
+            None,
+            "the asset's own sidecar wins over directories"
+        );
+    }
+
+    #[test]
+    fn directory_sidecar_type_stops_at_the_input_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path().join("Assets").join("Models");
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("Crate.rbxm"), b"not a real rbxm").unwrap();
+        std::fs::write(tmp.path().join("Assets.tmeta"), "type = \"animation\"\n").unwrap();
+
+        let meta =
+            AssetMeta::load_for_asset(&base.join("Crate.rbxm"), &base.to_string_lossy()).unwrap();
+        assert_eq!(meta.pinned_model_kind(), None);
     }
 
     #[test]

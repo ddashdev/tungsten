@@ -129,7 +129,7 @@ fn prepare_raw_file(
 
     // `.tmeta` sidecar, read once: used for the animation kind pin below and
     // for display name/description later.
-    let meta = AssetMeta::load_for(path).unwrap_or_default();
+    let meta = AssetMeta::load_for_asset(path, base_path).unwrap_or_default();
 
     let kind = match asset::kind_from_ext(&src_ext) {
         Some(k) => {
@@ -555,6 +555,30 @@ mod tests {
         let key_a = hash_parts(&[bytes, a.fingerprint().as_bytes()]);
         let key_b = hash_parts(&[bytes, b.fingerprint().as_bytes()]);
         assert_ne!(key_a, key_b, "settings must invalidate the audio cache key");
+    }
+
+    /// A `type` pin on the input's base directory classifies files in nested
+    /// directories.
+    #[test]
+    fn base_directory_type_pin_reaches_nested_files() {
+        use crate::core::assets::asset::AssetKind;
+
+        let dir = tempfile::tempdir().unwrap();
+        let base = dir.path().join("Animations");
+        let nested = base.join("Bows").join("Shortbow").join("Left");
+        std::fs::create_dir_all(&nested).unwrap();
+        let model = nested.join("Idle.rbxm");
+        std::fs::write(&model, b"not a real rbxm").unwrap();
+        std::fs::write(
+            dir.path().join("Animations.tmeta.toml"),
+            "type = \"animation\"\n",
+        )
+        .unwrap();
+
+        let prep = prepare_raw_file(&model, &base.to_string_lossy(), None).unwrap();
+        assert_eq!(prep.kind, AssetKind::Animation);
+        assert_eq!(prep.kind.api_type(), "Animation");
+        assert_eq!(prep.meta.resolve_asset_type(), None);
     }
 
     /// A `.tmeta` `type` pin decides the animation/model classification without

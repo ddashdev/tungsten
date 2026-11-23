@@ -78,11 +78,12 @@ impl RobloxClient {
 
     /// Upload an asset and return its Roblox asset ID.
     pub async fn upload(&self, params: UploadParams) -> Result<u64> {
+        let asset_type = params
+            .asset_type_override
+            .clone()
+            .unwrap_or_else(|| params.kind.api_type().to_string());
         let request_json = serde_json::to_string(&UploadRequest {
-            asset_type: params
-                .asset_type_override
-                .clone()
-                .unwrap_or_else(|| params.kind.api_type().to_string()),
+            asset_type: asset_type.clone(),
             display_name: params.display_name.clone(),
             description: params.description.clone(),
             creation_context: CreationContext {
@@ -95,8 +96,9 @@ impl RobloxClient {
 
         log!(
             debug,
-            "Uploading {} ({} bytes, {})",
+            "Uploading {} as {} ({} bytes, {})",
             params.display_name,
+            asset_type,
             params.data.len(),
             mime
         );
