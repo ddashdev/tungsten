@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0-web.4]
+
 ### Fixed
 
 - Animations (`.rbxm`/`.rbxmx` files detected or pinned as animations) were uploaded with the `Model` asset type, so Roblox refused to load them as animations. They now upload as `Animation`. Animations uploaded by an earlier version have to be removed from `tungsten.lock` to be uploaded again
